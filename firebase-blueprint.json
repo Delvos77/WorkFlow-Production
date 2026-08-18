@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Job": {
+      "title": "Job SPK",
+      "description": "Surat Perintah Kerja (SPK) Percetakan & Packaging",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "customer": { "type": "string" },
+        "material": { "type": "string" },
+        "print": { "type": "string" },
+        "lamination": { "type": "string" },
+        "size": { "type": "string" },
+        "status": { "type": "string" },
+        "activePacking": { "type": "string" },
+        "targetQty": { "type": "number" },
+        "completedQty": { "type": "number" },
+        "packedQty": { "type": "number" },
+        "shippedQty": { "type": "number" },
+        "materials": { "type": "array" },
+        "steps": { "type": "array" },
+        "batches": { "type": "array" },
+        "activeBatchId": { "type": "string" },
+        "packingOptions": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "title", "targetQty", "steps"]
+    },
+    "RoutePreset": {
+      "title": "Route Preset",
+      "description": "Template preset alur tahapan produksi",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "steps": { "type": "array" }
+      },
+      "required": ["name", "steps"]
+    },
+    "DeviceSession": {
+      "title": "Device Session & Login History",
+      "description": "Catatan riwayat login perangkat dan hak akses peran (Moderator vs Spectator)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "userLabel": { "type": "string" },
+        "assignedRole": { "type": "string", "enum": ["moderator", "spectator"] },
+        "lastActive": { "type": "string" },
+        "firstLogin": { "type": "string" },
+        "platform": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "offline"] },
+        "ipHint": { "type": "string" }
+      },
+      "required": ["id", "deviceName", "assignedRole", "lastActive"]
+    }
+  },
+  "firestore": {
+    "/jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Daftar SPK Pekerjaan Produksi"
+    },
+    "/presets/{presetId}": {
+      "schema": "RoutePreset",
+      "description": "Template Preset Rute Produksi"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "DeviceSession",
+      "description": "Riwayat sesi login & hak akses perangkat"
+    }
+  }
+}

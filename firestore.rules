@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // SPK Jobs collection
+    match /jobs/{jobId} {
+      allow read, write: if true;
+    }
+    
+    // Route Presets collection
+    match /presets/{presetId} {
+      allow read, write: if true;
+    }
+
+    // Active Device Sessions & Access Role collection
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+  }
+}
