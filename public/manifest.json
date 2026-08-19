@@ -1,0 +1,17 @@
+{
+  "short_name": "Workflow SPK",
+  "name": "Workflow Produksi & Packing",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%232CA58D'/%3E%3Cpath d='M256 120L120 188l136 68 136-68-136-68z' fill='%23ffffff'/%3E%3Cpath d='M120 256l136 68 136-68' fill='none' stroke='%23ffffff' stroke-width='32' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M120 324l136 68 136-68' fill='none' stroke='%23ffffff' stroke-width='32' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#2CA58D",
+  "display": "standalone",
+  "orientation": "any"
+}

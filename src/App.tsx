@@ -18,6 +18,8 @@ import {
   subscribeToSessions,
   subscribeToDeviceRole,
   registerOrUpdateDeviceSession,
+  updateDeviceRoleInFirestore,
+  deleteDeviceSessionFromFirestore,
   saveJobToFirestore,
   deleteJobFromFirestore,
   savePresetToFirestore,
@@ -246,6 +248,9 @@ export default function App() {
       if (remoteRole && remoteRole !== userRoleRef.current) {
         setUserRole(remoteRole);
         saveStoredRole(remoteRole);
+        if (remoteRole === 'spectator') {
+          setActiveTab('laporan');
+        }
       }
     });
 
@@ -256,6 +261,13 @@ export default function App() {
       unsubscribeRole();
     };
   }, [currentDeviceId]);
+
+  // Guard: if device is spectator, it cannot be on pengaturan tab
+  useEffect(() => {
+    if (userRole === 'spectator' && activeTab === 'pengaturan') {
+      setActiveTab('laporan');
+    }
+  }, [userRole, activeTab]);
 
   // Sync Details Object for Badges & Modals
   const syncDetails: SyncDetails = {
@@ -335,9 +347,64 @@ export default function App() {
     const updated = createInitialDeviceSession(newRole);
     await registerOrUpdateDeviceSession(updated).catch(() => {});
 
-    // If spectator, optionally switch to laporan tab if in settings
+    // If spectator, automatically switch to laporan tab
     if (newRole === 'spectator' && activeTab === 'pengaturan') {
       setActiveTab('laporan');
+    }
+
+    showSyncToast(
+      'synced',
+      'Mode Akses Diperbarui',
+      `Perangkat ini sekarang menggunakan mode ${
+        newRole === 'moderator' ? 'Moderator (Akses Penuh)' : 'Spectator (Hanya Pantau)'
+      }.`
+    );
+  };
+
+  // Admin toggles any device session role (local + remote Firestore)
+  const handleToggleDeviceRole = async (deviceId: string, newRole: UserRole) => {
+    // 1. Optimistic update
+    setSessions((prev) =>
+      prev.map((s) => (s.id === deviceId ? { ...s, assignedRole: newRole } : s))
+    );
+
+    // 2. If it's this current device, apply locally immediately
+    if (deviceId === currentDeviceId) {
+      setUserRole(newRole);
+      saveStoredRole(newRole);
+      if (newRole === 'spectator') {
+        setActiveTab('laporan');
+      }
+    }
+
+    // 3. Persist to Firestore
+    try {
+      await updateDeviceRoleInFirestore(deviceId, newRole);
+      showSyncToast(
+        'synced',
+        'Hak Akses Diperbarui',
+        `Perangkat berhasil diatur sebagai ${
+          newRole === 'moderator' ? 'Moderator (Akses Penuh)' : 'Spectator (Hanya Pantau)'
+        }.`
+      );
+    } catch (err) {
+      console.warn('Device role update saved offline:', err);
+      showSyncToast(
+        'offline_saved',
+        'Tersimpan Offline',
+        'Perubahan hak akses perangkat tersimpan lokal.'
+      );
+    }
+  };
+
+  // Admin deletes a device session
+  const handleDeleteDeviceSession = async (deviceId: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== deviceId));
+    try {
+      await deleteDeviceSessionFromFirestore(deviceId);
+      showSyncToast('synced', 'Sesi Dihapus', 'Riwayat sesi perangkat berhasil dihapus.');
+    } catch (err) {
+      console.error('Failed to delete session:', err);
     }
   };
 
@@ -919,7 +986,7 @@ export default function App() {
             <LaporanView jobs={jobs} onSelectJob={handleSelectJob} />
           )}
 
-          {activeTab === 'pengaturan' && (
+          {activeTab === 'pengaturan' && userRole === 'moderator' && (
             <PengaturanView
               jobs={jobs}
               presets={presets}
@@ -931,6 +998,8 @@ export default function App() {
                 const refreshed = createInitialDeviceSession(userRole);
                 registerOrUpdateDeviceSession(refreshed);
               }}
+              onToggleDeviceRole={handleToggleDeviceRole}
+              onDeleteSession={handleDeleteDeviceSession}
               onOpenRoleSwitch={() => setIsRoleSwitchOpen(true)}
               onResetAllData={handleResetAllData}
               onRestoreSampleData={handleRestoreSampleData}
@@ -939,7 +1008,7 @@ export default function App() {
                 if (currentJob) {
                   setIsPrintModalOpen(true);
                 } else {
-                  alert('Pilih SPK terlebih dahulu untuk mencetak.');
+                  showSyncToast('offline_saved', 'Info Cetak', 'Pilih SPK terlebih dahulu untuk mencetak.');
                 }
               }}
             />

@@ -19,10 +19,11 @@ export const Navigation: React.FC<NavigationProps> = ({
 }) => {
   const isSpectator = userRole === 'spectator';
 
-  const tabs: { id: ActiveTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+  // For Spectator: only show monitoring tabs (Status SPK & Laporan). Hide Pengaturan completely!
+  const allTabs: { id: ActiveTab; label: string; icon: React.ReactNode; badge?: number; moderatorOnly?: boolean }[] = [
     {
       id: 'jobs',
-      label: isSpectator ? 'Monitoring Rute' : 'Jobs & Rute',
+      label: isSpectator ? 'Status & Rute' : 'Jobs & Rute',
       icon: <Briefcase className="w-5 h-5" />,
       badge: badgeCount,
     },
@@ -33,20 +34,23 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     {
       id: 'pengaturan',
-      label: isSpectator ? 'Info Akses' : 'Pengaturan',
+      label: 'Pengaturan',
       icon: <Settings className="w-5 h-5" />,
+      moderatorOnly: true,
     },
   ];
 
+  const visibleTabs = allTabs.filter((tab) => !tab.moderatorOnly || !isSpectator);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-6 py-2 flex justify-around items-center z-40 max-w-7xl mx-auto rounded-t-2xl shadow-2xl safe-area-pb">
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-3 sm:px-5 rounded-2xl transition font-semibold text-xs min-w-[72px] min-h-[48px] cursor-pointer relative touch-manipulation active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-4 sm:px-6 rounded-2xl transition font-semibold text-xs min-w-[80px] min-h-[48px] cursor-pointer relative touch-manipulation active:scale-95 ${
               isActive
                 ? 'text-[#2CA58D] font-black'
                 : 'text-slate-500 hover:text-slate-800'

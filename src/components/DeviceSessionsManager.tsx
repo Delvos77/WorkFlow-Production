@@ -31,6 +31,8 @@ interface DeviceSessionsManagerProps {
   currentDeviceId: string;
   currentUserRole: UserRole;
   onRefreshSessions?: () => void;
+  onToggleDeviceRole?: (deviceId: string, newRole: UserRole) => Promise<void>;
+  onDeleteSession?: (deviceId: string) => Promise<void>;
 }
 
 export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
@@ -38,12 +40,16 @@ export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
   currentDeviceId,
   currentUserRole,
   onRefreshSessions,
+  onToggleDeviceRole,
+  onDeleteSession,
 }) => {
   const isModerator = currentUserRole === 'moderator';
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'moderator' | 'spectator' | 'online'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabelInput, setEditLabelInput] = useState('');
+  const [loadingRoleId, setLoadingRoleId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Format relative timestamp
   const formatTime = (isoString?: string) => {
@@ -112,13 +118,18 @@ export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
   const handleToggleRole = async (session: DeviceSession) => {
     if (!isModerator) return;
     const newRole: UserRole = session.assignedRole === 'moderator' ? 'spectator' : 'moderator';
-    const confirmMsg =
-      newRole === 'moderator'
-        ? `Ubah hak akses perangkat "${session.userLabel || session.deviceName}" menjadi MODERATOR (Akses Penuh)?`
-        : `Ubah hak akses perangkat "${session.userLabel || session.deviceName}" menjadi SPECTATOR (Hanya Pantau / Read-Only)?`;
+    setLoadingRoleId(session.id);
 
-    if (confirm(confirmMsg)) {
-      await updateDeviceRoleInFirestore(session.id, newRole);
+    try {
+      if (onToggleDeviceRole) {
+        await onToggleDeviceRole(session.id, newRole);
+      } else {
+        await updateDeviceRoleInFirestore(session.id, newRole);
+      }
+    } catch (err) {
+      console.error('Failed to toggle role:', err);
+    } finally {
+      setLoadingRoleId(null);
     }
   };
 
@@ -138,12 +149,16 @@ export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
 
   const handleDeleteSession = async (session: DeviceSession) => {
     if (!isModerator) return;
-    if (
-      confirm(
-        `Hapus riwayat sesi perangkat "${session.userLabel || session.deviceName}" dari daftar?`
-      )
-    ) {
-      await deleteDeviceSessionFromFirestore(session.id);
+    try {
+      if (onDeleteSession) {
+        await onDeleteSession(session.id);
+      } else {
+        await deleteDeviceSessionFromFirestore(session.id);
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -394,21 +409,29 @@ export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
                   {isModerator && (
                     <button
                       onClick={() => handleToggleRole(session)}
-                      className={`px-2.5 py-1 text-xs font-bold rounded-xl border transition shadow-2xs cursor-pointer active:scale-95 touch-manipulation flex items-center gap-1 ${
-                        session.assignedRole === 'moderator'
-                          ? 'bg-white hover:bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-200'
+                      disabled={loadingRoleId === session.id}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-xl border transition shadow-2xs cursor-pointer active:scale-95 touch-manipulation flex items-center gap-1.5 ${
+                        loadingRoleId === session.id
+                          ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-wait'
+                          : session.assignedRole === 'moderator'
+                          ? 'bg-white hover:bg-amber-50 text-amber-800 border-amber-300 hover:border-amber-400'
+                          : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-300 hover:border-emerald-400'
                       }`}
                       title="Klik untuk mengubah peran akses perangkat ini"
                     >
-                      {session.assignedRole === 'moderator' ? (
+                      {loadingRoleId === session.id ? (
                         <>
-                          <Eye className="w-3 h-3 text-amber-600" />
+                          <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+                          <span>Menyimpan...</span>
+                        </>
+                      ) : session.assignedRole === 'moderator' ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5 text-amber-600" />
                           <span>Ubah ke Spectator</span>
                         </>
                       ) : (
                         <>
-                          <Shield className="w-3 h-3 text-emerald-600" />
+                          <Shield className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Jadikan Moderator</span>
                         </>
                       )}
@@ -417,13 +440,31 @@ export const DeviceSessionsManager: React.FC<DeviceSessionsManagerProps> = ({
 
                   {/* Delete / Revoke Session (Moderator Only & not current device) */}
                   {isModerator && !isCurrent && (
-                    <button
-                      onClick={() => handleDeleteSession(session)}
-                      title="Hapus sesi perangkat ini"
-                      className="p-1.5 bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl border border-slate-200 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    deleteConfirmId === session.id ? (
+                      <div className="flex items-center gap-1 bg-red-50 p-1 rounded-xl border border-red-200 animate-fadeIn">
+                        <span className="text-[10px] font-bold text-red-700 px-1">Hapus?</span>
+                        <button
+                          onClick={() => handleDeleteSession(session)}
+                          className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Ya
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirmId(session.id)}
+                        title="Hapus sesi perangkat ini"
+                        className="p-1.5 bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl border border-slate-200 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )
                   )}
                 </div>
               </div>

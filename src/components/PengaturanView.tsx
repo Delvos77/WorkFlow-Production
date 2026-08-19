@@ -26,6 +26,8 @@ interface PengaturanViewProps {
   currentDeviceId?: string;
   onRefreshSessions?: () => void;
   onOpenRoleSwitch?: () => void;
+  onToggleDeviceRole?: (deviceId: string, newRole: UserRole) => Promise<void>;
+  onDeleteSession?: (deviceId: string) => Promise<void>;
   onResetAllData: () => void;
   onRestoreSampleData: () => void;
   onImportData: (importedJobs: JobSPK[], importedPresets?: RoutePresetsMap) => void;
@@ -41,6 +43,8 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   currentDeviceId = '',
   onRefreshSessions,
   onOpenRoleSwitch,
+  onToggleDeviceRole,
+  onDeleteSession,
   onResetAllData,
   onRestoreSampleData,
   onImportData,
@@ -84,15 +88,11 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
 
         if (Array.isArray(parsed)) {
           onImportData(parsed);
-          alert(`Berhasil mengimpor ${parsed.length} SPK ke Firebase.`);
         } else if (parsed && Array.isArray(parsed.jobs)) {
           onImportData(parsed.jobs, parsed.presets);
-          alert(`Berhasil mengimpor ${parsed.jobs.length} SPK dan preset rute ke Firebase.`);
-        } else {
-          alert('Format file JSON tidak sesuai.');
         }
       } catch (err) {
-        alert('Gagal membaca file JSON: ' + (err as Error).message);
+        console.error('Gagal membaca file JSON:', err);
       }
     };
     reader.readAsText(file);
@@ -107,6 +107,8 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
         currentDeviceId={currentDeviceId}
         currentUserRole={userRole}
         onRefreshSessions={onRefreshSessions}
+        onToggleDeviceRole={onToggleDeviceRole}
+        onDeleteSession={onDeleteSession}
       />
 
       {/* 2. GENERAL SETTINGS CONTAINER */}
