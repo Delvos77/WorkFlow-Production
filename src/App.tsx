@@ -208,6 +208,32 @@ export default function App() {
 
   // Firebase Realtime Subscriptions (Jobs, Presets, Sessions & Remote Role Sync)
   useEffect(() => {
+    // Helper to cleanup stale spectator sessions inactive for > 5 minutes
+    const cleanupStaleSpectatorSessions = async (activeSessions: DeviceSession[]) => {
+      const now = Date.now();
+      const staleSessions = activeSessions.filter((s) => {
+        // Exclude moderators
+        if (s.assignedRole === 'moderator') return false;
+        // Exclude current device to avoid deleting self while active
+        if (s.id === currentDeviceId) return false;
+        
+        if (!s.lastActive) return true;
+        try {
+          const lastActiveTime = new Date(s.lastActive).getTime();
+          // 5 minutes = 300,000 milliseconds
+          return (now - lastActiveTime) > 5 * 60 * 1000;
+        } catch {
+          return true;
+        }
+      });
+
+      for (const session of staleSessions) {
+        if (session.id) {
+          deleteDeviceSessionFromFirestore(session.id).catch(() => {});
+        }
+      }
+    };
+
     // 1. Subscribe to Jobs
     const unsubscribeJobs = subscribeToJobs(
       (firestoreJobs, meta) => {
@@ -251,6 +277,7 @@ export default function App() {
     const unsubscribeSessions = subscribeToSessions(
       (firestoreSessions) => {
         setSessions(firestoreSessions);
+        cleanupStaleSpectatorSessions(firestoreSessions);
       },
       (err) => {
         console.warn('Using cached sessions:', err);
