@@ -11,12 +11,15 @@ import {
   SyncDetails,
   SyncToast,
   SyncState,
+  SecurityConfig,
 } from './types';
 import {
   subscribeToJobs,
   subscribeToPresets,
   subscribeToSessions,
   subscribeToDeviceRole,
+  subscribeToSecurityConfig,
+  saveSecurityConfigToFirestore,
   registerOrUpdateDeviceSession,
   updateDeviceRoleInFirestore,
   deleteDeviceSessionFromFirestore,
@@ -34,6 +37,10 @@ import {
   saveStoredPresets,
   loadStoredRole,
   saveStoredRole,
+  loadStoredSecurityConfig,
+  saveStoredSecurityConfig,
+  isAppUnlocked,
+  setAppUnlocked,
 } from './utils/storage';
 import {
   getOrCreateDeviceId,
@@ -49,6 +56,7 @@ import { LaporanView } from './components/LaporanView';
 import { PengaturanView } from './components/PengaturanView';
 import { OfflineAlertBanner } from './components/OfflineAlertBanner';
 import { SyncToastContainer } from './components/SyncToastContainer';
+import { AccessLockScreen } from './components/AccessLockScreen';
 
 import { AddSpkModal } from './components/modals/AddSpkModal';
 import { AddStepModal } from './components/modals/AddStepModal';
@@ -70,6 +78,12 @@ export default function App() {
   const [currentDeviceId] = useState<string>(() => getOrCreateDeviceId());
   const [userRole, setUserRole] = useState<UserRole>(() => loadStoredRole());
   const [sessions, setSessions] = useState<DeviceSession[]>([]);
+
+  // Security & Lock screen state (Locked for first-time access on new devices)
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => isAppUnlocked());
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(() =>
+    loadStoredSecurityConfig()
+  );
 
   // State initialization
   const [jobs, setJobs] = useState<JobSPK[]>(() => loadStoredJobs());
@@ -254,11 +268,18 @@ export default function App() {
       }
     });
 
+    // 5. Realtime Security Config & PINs Sync
+    const unsubscribeSecurity = subscribeToSecurityConfig((config) => {
+      setSecurityConfig(config);
+      saveStoredSecurityConfig(config);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribePresets();
       unsubscribeSessions();
       unsubscribeRole();
+      unsubscribeSecurity();
     };
   }, [currentDeviceId]);
 
@@ -359,6 +380,42 @@ export default function App() {
         newRole === 'moderator' ? 'Moderator (Akses Penuh)' : 'Spectator (Hanya Pantau)'
       }.`
     );
+  };
+
+  const handleUnlockSuccess = (role: UserRole) => {
+    setAppUnlocked(true);
+    setIsUnlocked(true);
+    handleSelectRole(role);
+  };
+
+  const handleLockApp = () => {
+    setAppUnlocked(false);
+    setIsUnlocked(false);
+    showSyncToast(
+      'offline_saved',
+      'Aplikasi Terkunci',
+      'Sesi ditutup dan gerbang akses terkunci kembali.'
+    );
+  };
+
+  const handleSaveSecurityConfig = async (newConfig: SecurityConfig) => {
+    setSecurityConfig(newConfig);
+    saveStoredSecurityConfig(newConfig);
+    try {
+      await saveSecurityConfigToFirestore(newConfig);
+      showSyncToast(
+        'synced',
+        'PIN Akses Diperbarui',
+        'PIN gerbang masuk baru berhasil disimpan dan disinkronkan ke Cloud.'
+      );
+    } catch (err) {
+      console.warn('Gagal menyimpan PIN ke Firestore:', err);
+      showSyncToast(
+        'offline_saved',
+        'Disimpan Offline',
+        'Perubahan PIN disimpan lokal di peramban ini.'
+      );
+    }
   };
 
   // Admin toggles any device session role (local + remote Firestore)
@@ -867,21 +924,34 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#E2E8F0] p-1.5 sm:p-3 md:p-4 text-slate-800 flex flex-col justify-between max-w-7xl mx-auto font-sans antialiased">
-      {/* App Container Card */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden border border-slate-200 flex flex-col flex-1 pb-20 md:pb-20">
-        {/* Top Header */}
-        <Header
-          activeCount={activeCount}
-          totalCount={jobs.length}
-          isOnline={isOnline}
-          syncDetails={syncDetails}
-          userRole={userRole}
-          onOpenAddSpk={() => setIsAddSpkOpen(true)}
-          onOpenRoleSwitch={() => setIsRoleSwitchOpen(true)}
-          onOpenSyncDetails={() => setIsSyncDetailsOpen(true)}
-          onPrintSpk={currentJob ? () => setIsPrintModalOpen(true) : undefined}
-        />
+    <>
+      {!isUnlocked ? (
+        <div className="min-h-screen bg-slate-950 flex flex-col justify-between">
+          <AccessLockScreen
+            securityConfig={securityConfig}
+            onUnlockSuccess={handleUnlockSuccess}
+            onShowNotification={showSyncToast}
+          />
+          {/* Realtime Toast Feedback */}
+          <SyncToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+        </div>
+      ) : (
+        <div className="min-h-screen bg-[#E2E8F0] p-1.5 sm:p-3 md:p-4 text-slate-800 flex flex-col justify-between max-w-7xl mx-auto font-sans antialiased">
+          {/* App Container Card */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden border border-slate-200 flex flex-col flex-1 pb-20 md:pb-20">
+            {/* Top Header */}
+            <Header
+              activeCount={activeCount}
+              totalCount={jobs.length}
+              isOnline={isOnline}
+              syncDetails={syncDetails}
+              userRole={userRole}
+              onOpenAddSpk={() => setIsAddSpkOpen(true)}
+              onOpenRoleSwitch={() => setIsRoleSwitchOpen(true)}
+              onOpenSyncDetails={() => setIsSyncDetailsOpen(true)}
+              onPrintSpk={currentJob ? () => setIsPrintModalOpen(true) : undefined}
+              onLockApp={handleLockApp}
+            />
 
         {/* Offline & Cloud Sync Status Notification Banner */}
         <OfflineAlertBanner
@@ -994,6 +1064,9 @@ export default function App() {
               userRole={userRole}
               sessions={sessions}
               currentDeviceId={currentDeviceId}
+              securityConfig={securityConfig}
+              onSaveSecurityConfig={handleSaveSecurityConfig}
+              onLockApp={handleLockApp}
               onRefreshSessions={() => {
                 const refreshed = createInitialDeviceSession(userRole);
                 registerOrUpdateDeviceSession(refreshed);
@@ -1122,6 +1195,8 @@ export default function App() {
         onClose={() => setJobToDelete(null)}
         onConfirmDelete={handleConfirmDelete}
       />
-    </div>
+        </div>
+      )}
+    </>
   );
 }

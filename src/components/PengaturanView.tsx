@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Settings,
   Trash2,
@@ -13,8 +13,12 @@ import {
   Eye,
   ChevronRight,
   UserCheck,
+  KeyRound,
+  Lock,
+  Save,
+  Check,
 } from 'lucide-react';
-import { JobSPK, RoutePresetsMap, UserRole, DeviceSession } from '../types';
+import { JobSPK, RoutePresetsMap, UserRole, DeviceSession, SecurityConfig } from '../types';
 import { DeviceSessionsManager } from './DeviceSessionsManager';
 
 interface PengaturanViewProps {
@@ -24,10 +28,13 @@ interface PengaturanViewProps {
   userRole?: UserRole;
   sessions?: DeviceSession[];
   currentDeviceId?: string;
+  securityConfig?: SecurityConfig;
   onRefreshSessions?: () => void;
   onOpenRoleSwitch?: () => void;
   onToggleDeviceRole?: (deviceId: string, newRole: UserRole) => Promise<void>;
   onDeleteSession?: (deviceId: string) => Promise<void>;
+  onSaveSecurityConfig?: (config: SecurityConfig) => Promise<void>;
+  onLockApp?: () => void;
   onResetAllData: () => void;
   onRestoreSampleData: () => void;
   onImportData: (importedJobs: JobSPK[], importedPresets?: RoutePresetsMap) => void;
@@ -41,10 +48,13 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   userRole = 'moderator',
   sessions = [],
   currentDeviceId = '',
+  securityConfig,
   onRefreshSessions,
   onOpenRoleSwitch,
   onToggleDeviceRole,
   onDeleteSession,
+  onSaveSecurityConfig,
+  onLockApp,
   onResetAllData,
   onRestoreSampleData,
   onImportData,
@@ -52,6 +62,34 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
 }) => {
   const isModerator = userRole === 'moderator';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Security PIN states
+  const [internalPin, setInternalPin] = useState(securityConfig?.internalPin || '1234');
+  const [moderatorPin, setModeratorPin] = useState(securityConfig?.moderatorPin || '8899');
+  const [isSavingPin, setIsSavingPin] = useState(false);
+  const [pinSaveSuccess, setPinSaveSuccess] = useState(false);
+
+  const handleSavePins = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSaveSecurityConfig) return;
+    if (internalPin.length < 4 || moderatorPin.length < 4) {
+      alert('PIN minimal terdiri dari 4 digit angka.');
+      return;
+    }
+    setIsSavingPin(true);
+    try {
+      await onSaveSecurityConfig({
+        internalPin: internalPin.trim(),
+        moderatorPin: moderatorPin.trim(),
+        isLockEnabled: true,
+        companyName: securityConfig?.companyName || 'Percetakan & Packaging Internal',
+      });
+      setPinSaveSuccess(true);
+      setTimeout(() => setPinSaveSuccess(false), 3000);
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
 
   const handleExportJSON = () => {
     const exportPayload = {
@@ -154,16 +192,107 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             </div>
           </div>
 
-          {onOpenRoleSwitch && (
-            <button
-              onClick={onOpenRoleSwitch}
-              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs rounded-xl border border-slate-300 transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer touch-manipulation active:scale-95 shrink-0"
-            >
-              <span>Ubah Peran Manual</span>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onLockApp && (
+              <button
+                type="button"
+                onClick={onLockApp}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition flex items-center gap-1.5 cursor-pointer touch-manipulation active:scale-95"
+                title="Kunci aplikasi di perangkat ini sekarang"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span>Kunci Perangkat</span>
+              </button>
+            )}
+
+            {onOpenRoleSwitch && (
+              <button
+                onClick={onOpenRoleSwitch}
+                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs rounded-xl border border-slate-300 transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer touch-manipulation active:scale-95 shrink-0"
+              >
+                <span>Ubah Peran Manual</span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* 🔒 PIN GERBANG INTERNAL & KEAMANAN SISTEM */}
+        {isModerator && (
+          <div className="p-4 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                <KeyRound className="w-4 h-4 text-[#2CA58D]" />
+                <span>PIN Gerbang Akses Masuk Internal (Layar Kunci)</span>
+              </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Shield className="w-3 h-3" />
+                <span>Aktif &amp; Terenkripsi</span>
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Setiap perangkat baru yang pertama kali membuka tautan aplikasi akan terkunci otomatis dan wajib memasukkan PIN ini.
+            </p>
+
+            <form onSubmit={handleSavePins} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  1. PIN Staff / Spectator (Hanya Pantau):
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={internalPin}
+                  onChange={(e) => setInternalPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Contoh: 1234"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2CA58D] text-slate-800"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Dibagikan ke staf operator / divisi lantai kerja.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  2. PIN Master Moderator (Akses Penuh):
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={moderatorPin}
+                  onChange={(e) => setModeratorPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Contoh: 8899"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2CA58D] text-slate-800"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Khusus Kepala Produksi / Admin Utama.
+                </span>
+              </div>
+
+              <div className="sm:col-span-2 flex items-center justify-between pt-1">
+                <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                  {pinSaveSuccess && (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>PIN berhasil diperbarui dan tersinkron ke Firebase!</span>
+                    </>
+                  )}
+                </span>
+
+                <button
+                  type="submit"
+                  disabled={isSavingPin}
+                  className="px-4 py-2 bg-[#2CA58D] hover:bg-[#238572] text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs touch-manipulation"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingPin ? 'Menyimpan...' : 'Simpan Perubahan PIN'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Backup & Restore Panel */}

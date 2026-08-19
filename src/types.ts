@@ -96,3 +96,10 @@ export interface SyncToast {
   description: string;
   timestamp: number;
 }
+
+export interface SecurityConfig {
+  internalPin: string;
+  moderatorPin: string;
+  isLockEnabled: boolean;
+  companyName?: string;
+}

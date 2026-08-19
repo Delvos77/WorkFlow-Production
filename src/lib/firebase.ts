@@ -4,6 +4,7 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -12,8 +13,9 @@ import {
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { JobSPK, RoutePresetsMap, DeviceSession, UserRole } from '../types';
+import { JobSPK, RoutePresetsMap, DeviceSession, UserRole, SecurityConfig } from '../types';
 import { INITIAL_JOBS, DEFAULT_ROUTE_PRESETS } from '../data/initialData';
+import { DEFAULT_SECURITY_CONFIG } from '../utils/storage';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -41,6 +43,8 @@ export { app, db };
 export const JOBS_COLLECTION = 'jobs';
 export const PRESETS_COLLECTION = 'presets';
 export const SESSIONS_COLLECTION = 'sessions';
+export const SETTINGS_COLLECTION = 'settings';
+export const SECURITY_DOC_ID = 'security_pins';
 
 /**
  * Utility to strip undefined properties before sending to Firestore
@@ -234,12 +238,42 @@ export function subscribeToDeviceRole(
 export async function registerOrUpdateDeviceSession(session: DeviceSession): Promise<void> {
   if (!session.id) return;
   const docRef = doc(db, SESSIONS_COLLECTION, session.id);
-  const payload = cleanForFirestore({
-    ...session,
-    lastActive: new Date().toISOString(),
-    status: 'online',
-  });
-  await setDoc(docRef, payload, { merge: true });
+
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const existing = snap.data() as DeviceSession;
+      // Do not overwrite existing assignedRole assigned by admin/moderator
+      const payload = cleanForFirestore({
+        deviceName: session.deviceName,
+        platform: session.platform,
+        userLabel: session.userLabel || existing.userLabel || 'Operator',
+        assignedRole: existing.assignedRole || session.assignedRole || 'spectator',
+        lastActive: new Date().toISOString(),
+        status: 'online',
+      });
+      await setDoc(docRef, payload, { merge: true });
+    } else {
+      // First login for new device -> default to spectator
+      const payload = cleanForFirestore({
+        ...session,
+        assignedRole: session.assignedRole || 'spectator',
+        firstLogin: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        status: 'online',
+      });
+      await setDoc(docRef, payload, { merge: true });
+    }
+  } catch {
+    // Offline fallback
+    const payload = cleanForFirestore({
+      ...session,
+      assignedRole: session.assignedRole || 'spectator',
+      lastActive: new Date().toISOString(),
+      status: 'online',
+    });
+    await setDoc(docRef, payload, { merge: true }).catch(() => {});
+  }
 }
 
 /**
@@ -341,4 +375,46 @@ export async function clearAllFirestoreData(jobIds: string[]) {
   } catch (err) {
     console.error('Failed to clear Firestore data:', err);
   }
+}
+
+/**
+ * Subscribe to security configuration (Internal Access PIN & Moderator PIN)
+ */
+export function subscribeToSecurityConfig(
+  onUpdate: (config: SecurityConfig) => void,
+  onError?: (err: Error) => void
+) {
+  const docRef = doc(db, SETTINGS_COLLECTION, SECURITY_DOC_ID);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as Partial<SecurityConfig>;
+        onUpdate({
+          ...DEFAULT_SECURITY_CONFIG,
+          ...data,
+        });
+      } else {
+        // Seed default security settings if not created yet
+        saveSecurityConfigToFirestore(DEFAULT_SECURITY_CONFIG).catch(() => {});
+        onUpdate(DEFAULT_SECURITY_CONFIG);
+      }
+    },
+    (err) => {
+      console.warn('Security config listener fallback:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
+ * Save Security Configuration to Firestore
+ */
+export async function saveSecurityConfigToFirestore(config: SecurityConfig): Promise<void> {
+  const docRef = doc(db, SETTINGS_COLLECTION, SECURITY_DOC_ID);
+  const payload = cleanForFirestore({
+    ...config,
+    updatedAt: new Date().toISOString(),
+  });
+  await setDoc(docRef, payload, { merge: true });
 }

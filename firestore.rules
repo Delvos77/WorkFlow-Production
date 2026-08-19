@@ -15,5 +15,10 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow read, write: if true;
     }
+
+    // System Settings & Security PINs
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
   }
 }

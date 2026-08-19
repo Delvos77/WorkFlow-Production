@@ -6,6 +6,7 @@ import {
   Shield,
   Eye,
   ChevronDown,
+  Lock,
 } from 'lucide-react';
 import { UserRole, SyncDetails } from '../types';
 import { SyncStatusBadge } from './SyncStatusBadge';
@@ -20,6 +21,7 @@ interface HeaderProps {
   onOpenRoleSwitch: () => void;
   onOpenSyncDetails: () => void;
   onPrintSpk?: () => void;
+  onLockApp?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRoleSwitch,
   onOpenSyncDetails,
   onPrintSpk,
+  onLockApp,
 }) => {
   const isModerator = userRole === 'moderator';
 
@@ -134,6 +137,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Printer className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Cetak</span>
+            </button>
+          )}
+
+          {/* Lock App / Log Out button */}
+          {onLockApp && (
+            <button
+              onClick={onLockApp}
+              title="Kunci Akses Aplikasi"
+              className="px-2.5 sm:px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-semibold rounded-xl transition border border-white/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-200" />
+              <span className="hidden sm:inline">Kunci</span>
             </button>
           )}
 

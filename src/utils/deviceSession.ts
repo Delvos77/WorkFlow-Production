@@ -77,7 +77,7 @@ export function detectDeviceName(): { deviceName: string; platform: string } {
   return { deviceName, platform };
 }
 
-export function createInitialDeviceSession(defaultRole: UserRole = 'moderator'): DeviceSession {
+export function createInitialDeviceSession(defaultRole: UserRole = 'spectator'): DeviceSession {
   const id = getOrCreateDeviceId();
   const { deviceName, platform } = detectDeviceName();
   const userLabel = getStoredUserLabel() || `Operator (${deviceName.split(' • ')[0]})`;
